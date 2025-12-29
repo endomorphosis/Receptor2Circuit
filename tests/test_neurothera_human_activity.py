@@ -212,22 +212,85 @@ def test_activity_map_default_name_from_filename(tmp_path):
     assert am.name == specific_path.stem
 
 
-@pytest.mark.skipif(not NIFTI_SUPPORT, reason="nibabel not available")
 def test_nifti_import_available():
     """Test that NIfTI support is available when dependencies are installed."""
-    from neurothera_map.human.activity import activity_map_from_nifti
-    
-    # Just check the function exists and can be called with correct signature
-    assert callable(activity_map_from_nifti)
+    import neurothera_map.human.activity as mod
+
+    # Simulate nibabel being available.
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(mod, "NIBABEL_AVAILABLE", True)
+        assert callable(mod.activity_map_from_nifti)
+    finally:
+        monkeypatch.undo()
 
 
-@pytest.mark.skipif(NIFTI_SUPPORT, reason="Testing behavior without nibabel")
 def test_nifti_import_error_when_not_available():
     """Test that appropriate error is raised when NIfTI dependencies are missing."""
-    from neurothera_map.human.activity import activity_map_from_nifti
-    
-    with pytest.raises(ImportError, match="nibabel is required"):
-        activity_map_from_nifti("dummy.nii.gz", "atlas.nii.gz")
+    import neurothera_map.human.activity as mod
+
+    # Simulate nibabel missing regardless of the actual environment.
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(mod, "NIBABEL_AVAILABLE", False)
+        with pytest.raises(ImportError, match="nibabel is required"):
+            mod.activity_map_from_nifti("dummy.nii.gz", "atlas.nii.gz")
+    finally:
+        monkeypatch.undo()
+
+
+def test_activity_map_from_nifti_smoke_with_fake_nibabel(tmp_path):
+    """Smoke test the NIfTI path with a tiny fake nibabel implementation."""
+    import neurothera_map.human.activity as mod
+
+    # Create minimal dummy files (existence is checked).
+    data_path = tmp_path / "data.nii.gz"
+    atlas_path = tmp_path / "atlas.nii.gz"
+    data_path.write_bytes(b"fake")
+    atlas_path.write_bytes(b"fake")
+
+    data = np.array(
+        [
+            [[1.0, 2.0], [3.0, 4.0]],
+            [[5.0, 6.0], [7.0, 8.0]],
+        ],
+        dtype=float,
+    )
+    atlas = np.array(
+        [
+            [[1, 1], [2, 2]],
+            [[1, 1], [2, 2]],
+        ],
+        dtype=int,
+    )
+
+    class _FakeImg:
+        def __init__(self, arr):
+            self._arr = arr
+
+        def get_fdata(self):
+            return np.asarray(self._arr)
+
+    class _FakeNib:
+        @staticmethod
+        def load(path):
+            p = str(path)
+            if p.endswith("data.nii.gz"):
+                return _FakeImg(data)
+            return _FakeImg(atlas)
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(mod, "NIBABEL_AVAILABLE", True)
+        monkeypatch.setattr(mod, "nib", _FakeNib, raising=False)
+
+        am = mod.activity_map_from_nifti(data_path, atlas_path, name="fake")
+        assert len(am.region_ids) == 2
+        out = am.to_dict()
+        assert out["1"] == pytest.approx(3.5)
+        assert out["2"] == pytest.approx(5.5)
+    finally:
+        monkeypatch.undo()
 
 
 def test_activity_map_integration_with_core_types(fixture_table_path):

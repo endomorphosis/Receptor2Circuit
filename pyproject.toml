@@ -8,6 +8,9 @@ addopts = [
     "--strict-markers",
     "--tb=short",
 ]
+markers = [
+  "allen_live: Run live Allen SDK integration tests (requires allensdk, cache/network; opt-in)",
+]
 
 [tool.black]
 line-length = 100

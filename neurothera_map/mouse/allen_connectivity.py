@@ -7,6 +7,7 @@ the NeuroThera ConnectivityGraph format.
 
 from __future__ import annotations
 
+import os
 import warnings
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -14,6 +15,94 @@ import numpy as np
 import pandas as pd
 
 from ..core.types import ConnectivityGraph
+
+
+_OFFLINE_STRUCTURES: List[Dict[str, object]] = [
+    {"id": 385, "acronym": "VISp", "name": "Primary visual area"},
+    {"id": 409, "acronym": "VISl", "name": "Lateral visual area"},
+    {"id": 402, "acronym": "VISal", "name": "Anterolateral visual area"},
+    {"id": 394, "acronym": "VISrl", "name": "Rostrolateral visual area"},
+    {"id": 401, "acronym": "VISam", "name": "Anteromedial visual area"},
+    {"id": 393, "acronym": "VISpm", "name": "Posteromedial visual area"},
+    {"id": 985, "acronym": "MOp", "name": "Primary motor area"},
+    {"id": 993, "acronym": "MOs", "name": "Secondary motor area"},
+    {"id": 322, "acronym": "SSp", "name": "Primary somatosensory area"},
+    {"id": 353, "acronym": "SSp-n", "name": "SSp nose"},
+    {"id": 329, "acronym": "SSp-bfd", "name": "SSp barrel field"},
+]
+
+
+class _OfflineStructureTree:
+    def __init__(self, structures: List[Dict[str, object]]):
+        self._structures = list(structures)
+        self._by_acronym = {str(s["acronym"]): s for s in self._structures}
+        self._by_id = {int(s["id"]): s for s in self._structures}
+
+    def get_structures_by_set_id(self, set_ids: List[int]) -> List[Dict[str, object]]:
+        # In offline mode we treat the requested set as "all known".
+        _ = set_ids
+        return list(self._structures)
+
+    def get_structures_by_acronym(self, acronyms: List[str]) -> List[Dict[str, object]]:
+        out: List[Dict[str, object]] = []
+        for a in acronyms:
+            s = self._by_acronym.get(str(a))
+            if s is not None:
+                out.append(s)
+        return out
+
+    def get_structures_by_id(self, ids: List[int]) -> List[Dict[str, object]]:
+        out: List[Dict[str, object]] = []
+        for i in ids:
+            s = self._by_id.get(int(i))
+            if s is not None:
+                out.append(s)
+        return out
+
+
+class _OfflineMouseConnectivityCache:
+    def __init__(self, manifest_file: Optional[str] = None, resolution: int = 25):
+        self.manifest_file = manifest_file
+        self.resolution = resolution
+        self._tree = _OfflineStructureTree(_OFFLINE_STRUCTURES)
+
+    def get_structure_tree(self) -> _OfflineStructureTree:
+        return self._tree
+
+    def get_structure_unionizes(
+        self,
+        *,
+        structure_ids: List[int],
+        hemisphere_ids: List[int],
+        include_descendants: bool,
+    ) -> List[Dict[str, object]]:
+        # Deterministic synthetic connectivity used for offline tests.
+        _ = hemisphere_ids
+        _ = include_descendants
+        rows: List[Dict[str, object]] = []
+        for src in structure_ids:
+            for tgt in structure_ids:
+                # Values in [0, 1) with intentional sparsity.
+                h = int(src) * 31 + int(tgt) * 17
+                bucket = h % 100
+                # ~70% zeros, ~30% non-zero.
+                if bucket < 70 or src == tgt:
+                    v = 0.0
+                else:
+                    v = float((bucket - 70) / 30.0)
+                rows.append(
+                    {
+                        "structure_id": int(src),
+                        "target_structure_id": int(tgt),
+                        "normalized_projection_volume": v,
+                    }
+                )
+        return rows
+
+    def get_experiments(self, injection_structure_ids: List[int]) -> List[Dict[str, object]]:
+        # Minimal synthetic experiment listing.
+        _ = injection_structure_ids
+        return [{"id": 1}]
 
 
 class AllenConnectivityLoader:
@@ -50,6 +139,15 @@ class AllenConnectivityLoader:
     
     def _initialize_sdk(self) -> None:
         """Initialize Allen SDK MouseConnectivityCache."""
+        offline = os.getenv("BWM_ALLEN_OFFLINE", "0").strip().lower() in {"1", "true", "yes"}
+        if offline:
+            self.mcc = _OfflineMouseConnectivityCache(
+                manifest_file=self.manifest_file,
+                resolution=self.resolution,
+            )
+            self.structure_tree = self.mcc.get_structure_tree()
+            return
+
         try:
             from allensdk.core.mouse_connectivity_cache import MouseConnectivityCache
             
@@ -113,43 +211,82 @@ class AllenConnectivityLoader:
         
         # Get projection density matrix
         try:
-            # Build union connectivity matrix
-            unionizes = self.mcc.get_structure_unionizes(
-                structure_ids=region_ids,
-                hemisphere_ids=[3],  # both hemispheres
-                include_descendants=False
-            )
-            
-            if len(unionizes) == 0:
-                warnings.warn("No connectivity data found for specified regions")
-                return self._empty_connectivity_graph()
-            
-            # Convert to DataFrame for easier manipulation
-            df = pd.DataFrame(unionizes)
-            
-            # Build adjacency matrix from projection_density or normalized_projection_volume
-            adjacency_dict: Dict[Tuple[int, int], float] = {}
-            
-            for _, row in df.iterrows():
-                source_id = row['structure_id']
-                target_id = row['target_structure_id']
-                
-                # Use normalized projection volume as connectivity strength
-                strength = row.get('normalized_projection_volume', 0.0)
-                if strength is None:
-                    strength = 0.0
-                    
-                adjacency_dict[(source_id, target_id)] = float(strength)
-            
-            # Build dense adjacency matrix
+            # Real allensdk path: build a region-to-region projection matrix using
+            # experiments for each injection structure.
+            offline = os.getenv("BWM_ALLEN_OFFLINE", "0").strip().lower() in {"1", "true", "yes"}
+
             id_to_idx = {rid: i for i, rid in enumerate(region_ids)}
             n = len(region_ids)
             adjacency = np.zeros((n, n), dtype=float)
-            
-            for (src, tgt), val in adjacency_dict.items():
-                if src in id_to_idx and tgt in id_to_idx:
-                    i, j = id_to_idx[src], id_to_idx[tgt]
-                    adjacency[i, j] = val
+
+            if not offline:
+                experiments = self.mcc.get_experiments(injection_structure_ids=region_ids)
+                exp_ids_by_source: Dict[int, List[int]] = {}
+                for e in experiments:
+                    try:
+                        src_id = int(e.get("structure_id"))
+                        exp_id = int(e.get("id"))
+                    except Exception:
+                        continue
+                    exp_ids_by_source.setdefault(src_id, []).append(exp_id)
+
+                selected_sources: List[int] = []
+                selected_experiment_ids: List[int] = []
+                for src in region_ids:
+                    ids = exp_ids_by_source.get(int(src), [])
+                    if not ids:
+                        continue
+                    # Deterministic choice: use the smallest experiment id.
+                    selected_sources.append(int(src))
+                    selected_experiment_ids.append(min(ids))
+
+                if not selected_experiment_ids:
+                    warnings.warn("No experiments found for specified regions")
+                    return self._empty_connectivity_graph()
+
+                projection = self.mcc.get_projection_matrix(
+                    selected_experiment_ids,
+                    projection_structure_ids=region_ids,
+                    hemisphere_ids=[3],
+                    parameter="normalized_projection_volume",
+                    dataframe=False,
+                )
+
+                mat = np.asarray(projection["matrix"], dtype=float)
+                mat = np.nan_to_num(mat, nan=0.0, posinf=0.0, neginf=0.0)
+
+                # Columns correspond to (hemisphere_id, structure_id)
+                col_struct_ids: List[int] = [int(c["structure_id"]) for c in projection["columns"]]
+                for row_idx, src_id in enumerate(selected_sources):
+                    src_i = id_to_idx.get(int(src_id))
+                    if src_i is None:
+                        continue
+                    for col_idx, tgt_id in enumerate(col_struct_ids):
+                        tgt_j = id_to_idx.get(int(tgt_id))
+                        if tgt_j is None:
+                            continue
+                        adjacency[src_i, tgt_j] = float(mat[row_idx, col_idx])
+            else:
+                # Offline stub path: construct deterministic synthetic adjacency from pairwise unionizes.
+                unionizes = self.mcc.get_structure_unionizes(
+                    structure_ids=region_ids,
+                    hemisphere_ids=[3],
+                    include_descendants=False,
+                )
+
+                if len(unionizes) == 0:
+                    warnings.warn("No connectivity data found for specified regions")
+                    return self._empty_connectivity_graph()
+
+                df = pd.DataFrame(unionizes)
+                for _, row in df.iterrows():
+                    src = int(row["structure_id"])
+                    tgt = int(row["target_structure_id"])
+                    strength = row.get("normalized_projection_volume", 0.0)
+                    if strength is None:
+                        strength = 0.0
+                    if src in id_to_idx and tgt in id_to_idx:
+                        adjacency[id_to_idx[src], id_to_idx[tgt]] = float(strength)
             
             # Normalize if requested
             if normalize:

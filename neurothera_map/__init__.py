@@ -19,6 +19,8 @@ from .core.types import (
 )
 
 from .drug.profile import build_drug_profile
+from .human.translate import translate_to_human
+from .human.validate import validate_against_pet_and_fmri
 
 __all__ = [
     "RegionMap",
@@ -28,4 +30,6 @@ __all__ = [
     "DrugInteraction",
     "DrugProfile",
     "build_drug_profile",
+    "translate_to_human",
+    "validate_against_pet_and_fmri",
 ]

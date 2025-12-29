@@ -34,6 +34,7 @@ setup(
         "seaborn>=0.11.0",
         "scikit-learn>=1.0.0",
         "tqdm>=4.60.0",
+        "requests>=2.28.0",
     ],
     extras_require={
         "dev": [
@@ -42,6 +43,25 @@ setup(
             "black>=22.0.0",
             "flake8>=4.0.0",
             "mypy>=0.950",
+        ],
+        # Optional runtime dependencies used by integration-style tests and adapters.
+        "allen": [
+            "allensdk>=2.15.0; python_version < '3.12'",
+        ],
+        "e2e_allen": [
+            "allensdk>=2.15.0; python_version < '3.12'",
+            "nibabel>=5.0.0",
+        ],
+        "nifti": [
+            "nibabel>=5.0.0",
+        ],
+        "abagen": [
+            "abagen",
+        ],
+        "integration": [
+            "allensdk>=2.15.0; python_version < '3.12'",
+            "nibabel>=5.0.0",
+            "abagen",
         ],
         "docs": [
             "sphinx>=4.0.0",

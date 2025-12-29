@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional
 
 from ..core.types import DrugInteraction, DrugProfile
 
@@ -50,17 +49,8 @@ _SEED_DB: Dict[str, List[Dict[str, Any]]] = {
 }
 
 
-def _convert_drug_profile(
-    drug_profile: Any,
-) -> DrugProfile:
-    """Convert /drug DrugProfile to neurothera_map DrugProfile.
-    
-    Args:
-        drug_profile: DrugProfile from drug.schemas module
-        
-    Returns:
-        DrugProfile in neurothera_map.core.types format
-    """
+def convert_ingestion_profile_to_neurothera(drug_profile: Any) -> DrugProfile:
+    """Convert the repository's `/drug` ingestion DrugProfile to NeuroThera core type."""
     interactions: List[DrugInteraction] = []
     
     for interaction in drug_profile.interactions:
@@ -119,6 +109,10 @@ def _convert_drug_profile(
     )
 
 
+# Backwards-compatibility alias used by existing tests.
+_convert_drug_profile = convert_ingestion_profile_to_neurothera
+
+
 def _build_from_seed(name: str) -> DrugProfile:
     """Build DrugProfile from seed database.
     
@@ -162,7 +156,17 @@ def _build_from_seed(name: str) -> DrugProfile:
     return DrugProfile(name=normalized, interactions=tuple(interactions), provenance=provenance)
 
 
-def build_drug_profile(name: str, *, mode: Literal["auto", "seed", "ingest"] = "auto") -> DrugProfile:
+def build_drug_profile(
+    name: str,
+    *,
+    mode: Literal["auto", "seed", "ingest"] = "auto",
+    cache_dir: Optional[str] = None,
+    # IMPORTANT: default to offline-safe behavior.
+    # Users can opt into networked ingestion by setting these True.
+    use_iuphar: bool = False,
+    use_chembl: bool = False,
+    merge: bool = True,
+) -> DrugProfile:
     """Build a normalized DrugProfile.
 
     Behavior by mode:
@@ -188,37 +192,7 @@ def build_drug_profile(name: str, *, mode: Literal["auto", "seed", "ingest"] = "
     # Handle ingest or auto mode
     if mode in ("ingest", "auto"):
         try:
-            # Try to import drug loader
             from drug.drug_loader import DrugLoader
-            
-            # Attempt ingestion
-            loader = DrugLoader()
-            drug_profile = loader.load_drug_profile(name)
-            
-            if drug_profile is not None:
-                # Successfully loaded from ingestion
-                return _convert_drug_profile(drug_profile)
-            
-            # Ingestion returned None (drug not found)
-            if mode == "ingest":
-                raise RuntimeError(
-                    f"Drug '{name}' not found in ingestion databases. "
-                    "Try mode='seed' for offline fallback or check drug name spelling."
-                )
-            
-            # Auto mode: fall back to seed
-            profile = _build_from_seed(name)
-            # Update provenance to note fallback
-            provenance_updated = dict(profile.provenance)
-            provenance_updated["mode"] = "auto"
-            provenance_updated["ingestion_attempted"] = True
-            provenance_updated["ingestion_available"] = False
-            return DrugProfile(
-                name=profile.name,
-                interactions=profile.interactions,
-                provenance=provenance_updated,
-            )
-            
         except ImportError as e:
             if mode == "ingest":
                 raise ImportError(
@@ -233,6 +207,60 @@ def build_drug_profile(name: str, *, mode: Literal["auto", "seed", "ingest"] = "
             provenance_updated["mode"] = "auto"
             provenance_updated["ingestion_attempted"] = True
             provenance_updated["ingestion_available"] = False
+            return DrugProfile(
+                name=profile.name,
+                interactions=profile.interactions,
+                provenance=provenance_updated,
+            )
+
+        try:
+            loader = DrugLoader(cache_dir=cache_dir)
+            drug_profile = loader.load_drug_profile(
+                name,
+                use_iuphar=use_iuphar,
+                use_chembl=use_chembl,
+                merge=merge,
+            )
+
+            if drug_profile is not None:
+                return convert_ingestion_profile_to_neurothera(drug_profile)
+
+            # Ingestion returned None (drug not found)
+            if mode == "ingest":
+                raise RuntimeError(
+                    f"Drug '{name}' not found in ingestion databases. "
+                    "Try mode='seed' for offline fallback or check drug name spelling."
+                )
+
+            # Auto mode: fall back to seed
+            profile = _build_from_seed(name)
+            provenance_updated = dict(profile.provenance)
+            provenance_updated["mode"] = "auto"
+            provenance_updated["ingestion_attempted"] = True
+            provenance_updated["ingestion_available"] = False
+            return DrugProfile(
+                name=profile.name,
+                interactions=profile.interactions,
+                provenance=provenance_updated,
+            )
+
+        except Exception as e:
+            # Preserve the explicit "not found" error in ingest mode.
+            if mode == "ingest" and isinstance(e, RuntimeError):
+                raise
+
+            if mode == "ingest":
+                raise RuntimeError(
+                    "Ingestion failed in mode='ingest'. "
+                    "This may be due to missing network access, API changes, or adapter bugs."
+                ) from e
+
+            profile = _build_from_seed(name)
+            provenance_updated = dict(profile.provenance)
+            provenance_updated["mode"] = "auto"
+            provenance_updated["ingestion_attempted"] = True
+            provenance_updated["ingestion_available"] = True
+            provenance_updated["ingestion_error"] = f"{type(e).__name__}: {e}"
             return DrugProfile(
                 name=profile.name,
                 interactions=profile.interactions,

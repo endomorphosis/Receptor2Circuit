@@ -146,30 +146,42 @@ def test_load_transcriptomic_map_from_csv_wide_format():
         Path(temp_path).unlink()
 
 
-@pytest.mark.skip(reason="abagen is an optional dependency, only run if installed")
 def test_load_transcriptomic_map_with_abagen_requires_installation():
     """Test that abagen function raises ImportError when abagen not installed."""
-    # This test will be skipped by default
-    # If abagen is installed, it would actually run and potentially download data
-    try:
-        import abagen  # noqa: F401
+    # Force the import failure path deterministically, regardless of environment.
+    import importlib.util
 
-        pytest.skip("abagen is installed, skipping ImportError test")
-    except ImportError:
-        # abagen not installed, test should raise ImportError
+    real_find_spec = importlib.util.find_spec
+
+    def _fake_find_spec(name, package=None):
+        if name == "abagen":
+            return None
+        return real_find_spec(name, package=package)
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
         with pytest.raises(ImportError, match="abagen is not installed"):
             load_transcriptomic_map_with_abagen(atlas="schaefer", n_parcels=100)
+    finally:
+        monkeypatch.undo()
 
 
 def test_load_transcriptomic_map_with_abagen_not_installed():
     """Test graceful handling when abagen is not available."""
     # This test checks that the function provides helpful error message
-    try:
-        import abagen  # noqa: F401
+    import importlib.util
 
-        pytest.skip("abagen is installed, cannot test ImportError handling")
-    except ImportError:
-        # Verify that the function raises ImportError with helpful message
+    real_find_spec = importlib.util.find_spec
+
+    def _fake_find_spec(name, package=None):
+        if name == "abagen":
+            return None
+        return real_find_spec(name, package=package)
+
+    monkeypatch = pytest.MonkeyPatch()
+    try:
+        monkeypatch.setattr(importlib.util, "find_spec", _fake_find_spec)
         with pytest.raises(ImportError) as exc_info:
             load_transcriptomic_map_with_abagen()
 
@@ -177,6 +189,8 @@ def test_load_transcriptomic_map_with_abagen_not_installed():
         assert "abagen is not installed" in error_msg
         assert "pip install abagen" in error_msg
         assert "load_transcriptomic_map_from_csv" in error_msg
+    finally:
+        monkeypatch.undo()
 
 
 def test_receptor_map_keyed_by_gene_symbols():

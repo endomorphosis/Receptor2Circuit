@@ -1,5 +1,8 @@
 """Tests for human PET receptor map loader."""
 
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -8,15 +11,6 @@ from neurothera_map.human.receptors import (
     load_human_pet_receptor_maps,
 )
 
-
-def _hansen_receptors_available() -> bool:
-    """Helper to check if hansen_receptors is available."""
-    try:
-        import hansen_receptors  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
 
 
 def test_load_human_pet_receptor_maps_basic():
@@ -182,19 +176,17 @@ def test_pet_receptor_table_spec_custom():
     assert "5HT1a" in receptor_map.receptor_names()
 
 
-@pytest.mark.skipif(
-    not _hansen_receptors_available(),
-    reason="hansen_receptors package not installed",
-)
 def test_hansen_receptors_integration_available():
     """Test that hansen_receptors detection works when package is available."""
-    # This test will only run if hansen_receptors is installed
+    # Simulate the optional dependency without requiring an external package.
+    sys.modules["hansen_receptors"] = types.ModuleType("hansen_receptors")
+
     receptor_map = load_human_pet_receptor_maps(
         "datasets/human_pet_receptor_fixture.csv",
         receptors=["5HT1a"],
     )
 
-    # When hansen_receptors is available, provenance should indicate this
-    assert "source" in receptor_map.provenance
+    # When hansen_receptors is available, provenance should indicate this.
+    assert receptor_map.provenance.get("source") == "csv_with_hansen_receptors_available"
     # Note: actual integration with hansen_receptors would be tested here
     # For now we just check that the package detection doesn't break anything

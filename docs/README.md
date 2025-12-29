@@ -7,12 +7,15 @@ This document is written to be “agent-ready”: it’s an executable plan for 
 ## Phase 0 — Project foundations (week 0–1)
 
 ### Deliverables
-- [ ] Repo skeleton (this)
-- [ ] `core/` package scaffold + packaging config
-- [ ] **Unified schema** for exchanged artifacts:
+- [x] Repo skeleton (this)
+- [x] `core/` package scaffold + packaging config
+- [x] **Unified schema** for exchanged artifacts:
   - `RegionMap`, `ReceptorMap`, `ActivityMap`, `ConnectivityGraph`, `DrugProfile`
-- [ ] Data provenance + caching conventions
-- [ ] Minimum CI: lint + typecheck + unit tests
+  - Implemented in `neurothera_map/core/types.py`
+- [~] Data provenance + caching conventions
+  - Implemented ad-hoc via `provenance` dicts on core types; still needs a single shared convention doc
+- [~] Minimum CI: lint + typecheck + unit tests
+  - Unit tests exist and pass locally; CI wiring is still TBD
 
 ### Decisions to lock early
 - Canonical mouse atlas space: **Allen CCF (2020)**.
@@ -29,9 +32,13 @@ This document is written to be “agent-ready”: it’s an executable plan for 
 Goal: From mouse brain-wide activity → receptor hypotheses → circuit propagation.
 
 ### 1.1 Data ingestion connectors (MVP)
-- [ ] IBL Brain-Wide Map (via ONE API and/or AWS mirror)
-- [ ] Allen Mouse Brain Atlas expression summaries for a panel of receptors
-- [ ] Allen Mouse Connectivity Atlas projection matrices (region-level)
+- [~] IBL Brain-Wide Map (via ONE API and/or AWS mirror)
+  - Implemented in the `brainwidemap/` package; NeuroThera-level "task → ActivityMap" is still evolving
+- [~] Allen Mouse Brain Atlas expression summaries for a panel of receptors
+  - MVP implemented as an *offline CSV panel loader* in `neurothera_map/mouse/expression.py`
+  - Direct Allen API ingestion not yet implemented
+- [x] Allen Mouse Connectivity Atlas projection matrices (region-level)
+  - Implemented in `neurothera_map/mouse/allen_connectivity.py`
 
 ### 1.2 Harmonization
 - [ ] Region ontology / acronym normalization (Allen CCF ids)
@@ -39,17 +46,31 @@ Goal: From mouse brain-wide activity → receptor hypotheses → circuit propaga
   - for each dataset, produce `ActivityMap(region_id -> effect_size)` + uncertainty
 
 ### 1.3 Analytic primitives
-- [ ] Receptor enrichment in circuit nodes:
+- [x] Receptor enrichment in circuit nodes:
   - region activity importance weights × receptor expression → candidate receptor list
-- [ ] Graph propagation:
+- [x] Graph propagation:
   - diffusion / random-walk / controllability approximations on `ConnectivityGraph`
-- [ ] Simple prediction:
+- [x] Simple prediction:
   - `PredictedActivation = f(DrugProfile ⊙ ReceptorMap, ConnectivityGraph)`
+  - Implemented as `predict_mouse_effects()` in `neurothera_map/mouse/mvp_predict.py`
 
 ### 1.4 Validation hooks (mouse)
 - [ ] Consistency checks:
   - known neuromodulatory systems should score high in known targets (sanity tests)
 - [ ] “Leave-one-region-out” and “leave-one-session-out” robustness tests
+
+---
+
+## Parallel workstreams (agent-friendly)
+
+This plan is designed to be implemented via independent PRs that can run in parallel.
+
+Suggested split:
+- **Mouse**: Allen expression API ingestion + region normalization + robustness tests
+- **Human**: PET receptor maps loader (optional deps) + AHBA transcriptomics loader (optional deps)
+- **Human activation**: BIDS/parcellated-map ingestion interface + smoke-test dataset config
+- **Drug**: unify `build_drug_profile()` to optionally use the richer `/drug` ingestion layer
+- **Validation**: schema validators + dummy mutual-loss loop (no real AlphaFold required)
 
 ---
 
@@ -129,7 +150,7 @@ Deliverables:
 You can run:
 
 1) `drug_profile = build_drug_profile("caffeine")`  
-2) `mouse_pred = predict_mouse_effects(drug_profile, task="decision-making")`  
+2) `mouse_pred = predict_mouse_effects(drug_profile, receptor_map, connectivity_graph)`  
 3) `human_pred = translate_to_human(mouse_pred)`  
 4) `validate_against_pet_and_fmri(human_pred)`  
 5) send `human_pred` constraints back to AlphaFold package
