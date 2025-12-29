@@ -13,3 +13,12 @@ scikit-learn>=1.0.0
 
 # Utilities
 tqdm>=4.60.0
+
+# Drug database ingestion
+requests>=2.28.0
+
+# Optional dependencies used by some integration-style tests and adapters:
+# - allensdk (Allen connectivity)
+# - nibabel (NIfTI ingestion)
+# - abagen (AHBA workflows)
+# - hansen_receptors (PET receptor helpers)

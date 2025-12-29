@@ -1,0 +1,8 @@
+# End-to-end (E2E) environment for real Allen SDK + NIfTI path
+# Recommended: Python 3.11 (allensdk is not always compatible with 3.12)
+
+-r requirements-dev.txt
+
+numpy<2
+allensdk>=2.15.0; python_version < '3.12'
+nibabel>=5.0.0

@@ -1,0 +1,8 @@
+# Optional integration dependencies (may require system deps and/or network access)
+# Install with: pip install -r requirements-integration.txt
+
+-r requirements-dev.txt
+
+allensdk>=2.15.0; python_version < '3.12'
+nibabel>=5.0.0
+abagen
