@@ -1,8 +1,11 @@
 """Human translation subpackage.
 
-Phase 2.3 MVP: ActivityMap ingestion from parcellated tables.
+Provides loaders for human brain receptor maps and related functionality.
 """
 
-from .activity import activity_map_from_parcellated_table
+from .receptors import PETReceptorTableSpec, load_human_pet_receptor_maps
 
-__all__ = ["activity_map_from_parcellated_table"]
+__all__ = [
+    "load_human_pet_receptor_maps",
+    "PETReceptorTableSpec",
+]
