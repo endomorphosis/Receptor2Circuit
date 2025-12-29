@@ -1,6 +1,11 @@
 """Human translation subpackage.
 
-MVP placeholder: implementation will arrive in a later phase.
+Provides loaders for human brain receptor maps and related functionality.
 """
 
-__all__ = []
+from .receptors import PETReceptorTableSpec, load_human_pet_receptor_maps
+
+__all__ = [
+    "load_human_pet_receptor_maps",
+    "PETReceptorTableSpec",
+]
