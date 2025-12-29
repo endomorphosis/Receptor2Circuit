@@ -7,6 +7,45 @@ Goal: take hypotheses generated in mouse and test their plausibility in humans u
 
 ---
 
+## Quick Start: Loading Human PET Receptor Maps
+
+```python
+from neurothera_map.human import load_human_pet_receptor_maps
+
+# Load all receptors from offline fixture
+receptor_map = load_human_pet_receptor_maps(
+    "datasets/human_pet_receptor_fixture.csv"
+)
+
+# Or load specific receptors
+receptor_map = load_human_pet_receptor_maps(
+    "datasets/human_pet_receptor_fixture.csv",
+    receptors=["5HT1a", "D1", "D2"]
+)
+
+# Access individual receptor maps
+serotonin_1a = receptor_map.get("5HT1a")
+print(f"Regions: {serotonin_1a.region_ids}")
+print(f"Values: {serotonin_1a.values}")
+
+# List all available receptors
+print(receptor_map.receptor_names())
+```
+
+### Optional Integration: hansen_receptors
+
+If you have the `hansen_receptors` package installed, the loader will detect it automatically:
+
+```bash
+pip install hansen_receptors
+```
+
+The base implementation works entirely offline using CSV fixtures and does not require
+`hansen_receptors` to be installed.
+
+---
+
+
 ## 1) Human “starter triad” (recommended MVP)
 
 1) **PET receptor atlas** (`hansen_receptors`)
