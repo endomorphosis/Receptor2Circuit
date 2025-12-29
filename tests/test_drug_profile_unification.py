@@ -246,7 +246,7 @@ class TestConversion:
         profile = _convert_drug_profile(mock_profile)
         
         assert profile.provenance["builder"] == "neurothera_map.drug.build_drug_profile"
-        assert profile.provenance["normalized_name"] == "ProvenanceTest"
+        assert profile.provenance["normalized_name"] == "provenancetest"  # Lowercased
         assert profile.provenance["mode"] == "ingest"
         assert profile.provenance["source_databases"] == ["IUPHAR", "ChEMBL"]
         assert profile.provenance["chembl_id"] == "CHEMBL999"

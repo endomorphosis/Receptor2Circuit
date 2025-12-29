@@ -102,7 +102,7 @@ def _convert_drug_profile(
     
     provenance: Dict[str, Any] = {
         "builder": "neurothera_map.drug.build_drug_profile",
-        "normalized_name": drug_profile.common_name,
+        "normalized_name": drug_profile.common_name.lower(),
         "mode": "ingest",
         "source_databases": drug_profile.source_databases,
     }
