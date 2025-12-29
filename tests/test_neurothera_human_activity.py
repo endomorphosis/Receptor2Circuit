@@ -3,7 +3,6 @@
 These tests are designed to run offline using fixture data.
 Optional NIfTI tests are skipped if neuroimaging libraries are not available.
 """
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -28,16 +27,11 @@ def fixture_table_path():
 
 
 @pytest.fixture
-def temp_csv_file():
+def temp_csv_file(tmp_path):
     """Create a temporary CSV file for testing."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
-        f.write("region,value\n")
-        f.write("ACC,0.5\n")
-        f.write("DLPFC,0.3\n")
-        f.write("mPFC,-0.2\n")
-        temp_path = Path(f.name)
-    yield temp_path
-    temp_path.unlink()
+    temp_file = tmp_path / "test_data.csv"
+    temp_file.write_text("region,value\nACC,0.5\nDLPFC,0.3\nmPFC,-0.2\n")
+    return temp_file
 
 
 def test_activity_map_from_parcellated_table_basic(fixture_table_path):
@@ -69,31 +63,28 @@ def test_activity_map_from_parcellated_table_region_values(fixture_table_path):
     assert region_dict["mPFC"] == -0.10
 
 
-def test_activity_map_from_parcellated_table_custom_columns(temp_csv_file):
+def test_activity_map_from_parcellated_table_custom_columns(tmp_path):
     """Test loading with custom column names."""
     # Create a file with custom column names
     df = pd.DataFrame({
         "brain_region": ["A", "B", "C"],
         "activation": [1.0, 2.0, 3.0],
     })
-    custom_path = temp_csv_file.with_suffix(".custom.csv")
+    custom_path = tmp_path / "custom_columns.csv"
     df.to_csv(custom_path, index=False)
 
-    try:
-        am = activity_map_from_parcellated_table(
-            custom_path,
-            region_col="brain_region",
-            value_col="activation",
-        )
+    am = activity_map_from_parcellated_table(
+        custom_path,
+        region_col="brain_region",
+        value_col="activation",
+    )
 
-        assert len(am.region_ids) == 3
-        assert set(am.region_ids) == {"A", "B", "C"}
-        region_dict = am.to_dict()
-        assert region_dict["A"] == 1.0
-        assert region_dict["B"] == 2.0
-        assert region_dict["C"] == 3.0
-    finally:
-        custom_path.unlink()
+    assert len(am.region_ids) == 3
+    assert set(am.region_ids) == {"A", "B", "C"}
+    region_dict = am.to_dict()
+    assert region_dict["A"] == 1.0
+    assert region_dict["B"] == 2.0
+    assert region_dict["C"] == 3.0
 
 
 def test_activity_map_from_parcellated_table_custom_space_name(fixture_table_path):
@@ -210,21 +201,15 @@ def test_activity_map_from_parcellated_table_negative_values(fixture_table_path)
     assert region_dict["mPFC"] < 0
 
 
-def test_activity_map_default_name_from_filename():
+def test_activity_map_default_name_from_filename(tmp_path):
     """Test that default name is derived from filename."""
     # Create a temporary file with a specific name
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, prefix="my_activity_data_") as f:
-        f.write("region,value\n")
-        f.write("A,1.0\n")
-        specific_path = Path(f.name)
+    specific_path = tmp_path / "my_activity_data.csv"
+    specific_path.write_text("region,value\nA,1.0\n")
     
-    try:
-        am = activity_map_from_parcellated_table(specific_path)
-        # Name should be the stem (filename without extension)
-        assert am.name == specific_path.stem
-    finally:
-        if specific_path.exists():
-            specific_path.unlink()
+    am = activity_map_from_parcellated_table(specific_path)
+    # Name should be the stem (filename without extension)
+    assert am.name == specific_path.stem
 
 
 @pytest.mark.skipif(not NIFTI_SUPPORT, reason="nibabel not available")
