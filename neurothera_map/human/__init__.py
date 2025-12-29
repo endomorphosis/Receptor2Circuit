@@ -1,16 +1,11 @@
 """Human translation subpackage.
 
-Provides tools for working with human brain data including transcriptomics.
+Provides loaders for human brain receptor maps and related functionality.
 """
 
-from .transcriptomics import (
-    TranscriptomicTableSpec,
-    load_transcriptomic_map_from_csv,
-    load_transcriptomic_map_with_abagen,
-)
+from .receptors import PETReceptorTableSpec, load_human_pet_receptor_maps
 
 __all__ = [
-    "TranscriptomicTableSpec",
-    "load_transcriptomic_map_from_csv",
-    "load_transcriptomic_map_with_abagen",
+    "load_human_pet_receptor_maps",
+    "PETReceptorTableSpec",
 ]
