@@ -151,4 +151,4 @@ Mouse connectivity + MVP prediction live under `neurothera_map.mouse`.
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+AGPL 3.0 License — see [LICENSE](LICENSE).
