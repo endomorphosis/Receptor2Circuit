@@ -1,0 +1,9 @@
+region,value
+ACC,0.25
+DLPFC,0.15
+mPFC,-0.10
+Hippocampus,0.05
+Amygdala,0.30
+Thalamus,0.20
+Striatum,0.12
+Insula,0.08
