@@ -1,6 +1,16 @@
 """Human translation subpackage.
 
-MVP placeholder: implementation will arrive in a later phase.
+Provides tools for working with human brain data including transcriptomics.
 """
 
-__all__ = []
+from .transcriptomics import (
+    TranscriptomicTableSpec,
+    load_transcriptomic_map_from_csv,
+    load_transcriptomic_map_with_abagen,
+)
+
+__all__ = [
+    "TranscriptomicTableSpec",
+    "load_transcriptomic_map_from_csv",
+    "load_transcriptomic_map_with_abagen",
+]
